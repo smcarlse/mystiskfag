@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 
 
+
 #define DEVICE_NAME "gamepad"
 
 static int my_open (struct inode *inode, struct file *filp);
@@ -62,6 +63,20 @@ int irqOdd;
 
 unsigned int buttonValues;
 
+
+static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs
+                                  *regs){
+	printk("Dett er et interrupt");
+	printk("read buttons");
+	buttonValues = ioread32(GPIO_PC_DIN);
+	buttonValues = ~buttonValues;
+	buttonValues &= 255;
+	printk("buttonValues: %d", buttonValues);
+	iowrite32(ioread32(GPIO_IF),GPIO_IFC);
+	return IRQ_HANDLED;
+}
+
+
 static int my_probe(struct platform_device *dev)
 {
 	printk("yo");
@@ -69,39 +84,33 @@ static int my_probe(struct platform_device *dev)
 	printk("Major %d\n", err);
 	cdev_init(&my_cdev, &my_fops);
 	printk("Major %d\n", err);
-	err = cdev_add(&my_cdev, &device, 1);
+	err = cdev_add(&my_cdev, device, 1);
 	printk("Major %d\n", err);
 	cl = class_create(THIS_MODULE, DEVICE_NAME);
+	printk("cl: %p\n", cl);
 	err = device_create(cl, NULL, device, NULL, DEVICE_NAME);
 	printk("Major %d\n", err);
 	printk("Major %d\n", MAJOR(device));
 	printk("Hello World, here is your module speaking\n");
 	res = platform_get_resource(dev, IORESOURCE_MEM, 0);
-	printk("Hentet res\n");
+
+	printk("Hentet res%p\n", res);
 	irqEven = platform_get_irq(dev, 0);
 	irqOdd = platform_get_irq(dev, 1);
 	gpioRes = request_mem_region(res->start, res->end - res->start, DEVICE_NAME);
-	printk("requestet mem\n");
+	printk("requestet mem%p\n", gpioRes);
 
 	iowrite32(0x33333333,GPIO_PC_MODEL);
 	iowrite32(0xFF,GPIO_PC_DOUT);
-/*	while(1){
-	int c, d =1 ;
-	for ( c = 1 ; c <= 32767 ; c++ )
-       for (  d = 1 ; d <= 32767 ; d++ )
-       {}
-	printk("read buttons in init");
-	buttonValues = ioread32(GPIO_PC_DIN);
-	buttonValues = ~buttonValues;
-	buttonValues &= 255;
-	printk("buttonValues: %d", buttonValues);
-}/*
 
-	/*iowrite32(0x22222222,GPIO_EXTIPSELL);
+	request_irq(irqEven,interrupt_handler,NULL,DEVICE_NAME, NULL);
+	request_irq(irqOdd,interrupt_handler,NULL,DEVICE_NAME, NULL);
+
+	iowrite32(0x22222222,GPIO_EXTIPSELL);
 	iowrite32(0xFF,GPIO_EXTIRISE);
-	iowrite32(0xFF,GPIO_EXTIFALL);*/
-	
-	
+	iowrite32(0xFF,GPIO_EXTIFALL);
+	iowrite32(0xFF, GPIO_IEN);
+	return 0;
 }
 
 static int my_remove(struct platform_device *dev)
@@ -200,13 +209,10 @@ static int my_release(struct inode *inode, struct file *filp)
 
 static ssize_t my_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
 {
-	printk("read buttons");
-	buttonValues = ioread32(GPIO_PC_DIN);
-	buttonValues = ~buttonValues;
-	buttonValues &= 255;
-	printk("buttonValues: %d", buttonValues);
-	return buttonValues;
+	
+	return 4-copy_to_user(buff, &buttonValues, 4);
 }
+
 
 static ssize_t my_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
 {
