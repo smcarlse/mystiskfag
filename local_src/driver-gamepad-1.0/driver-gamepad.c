@@ -19,7 +19,7 @@
 #include <linux/irq.h>
 #include <linux/signal.h>
 #include <linux/platform_device.h>
-
+#include <linux/fs.h>
 
 
 #define DEVICE_NAME "gamepad"
@@ -29,12 +29,19 @@ static int my_release(struct inode *inode, struct file *filp);
 static ssize_t my_read(struct file *filp, char __user *buff, size_t count, loff_t *offp);
 static ssize_t my_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp);
 
+struct fasync_struct *async_queue;
+
+static int my_fasync(int fd, struct file *filp, int mode){
+	return fasync_helper(fd, filp, mode, &async_queue);
+}
+
 static struct file_operations my_fops = { 
 	.owner = THIS_MODULE,
 	.read = my_read,
 	.write = my_write,
 	.open = my_open,
-	.release = my_release 
+	.release = my_release, 
+	.fasync = my_fasync
 };
 
 /*
@@ -63,16 +70,19 @@ int irqOdd;
 
 unsigned int buttonValues;
 
-
-static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs
-                                  *regs){
-	printk("Dett er et interrupt");
+static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+	printk("Dette er et interrupt");
 	printk("read buttons");
 	buttonValues = ioread32(GPIO_PC_DIN);
 	buttonValues = ~buttonValues;
 	buttonValues &= 255;
 	printk("buttonValues: %d", buttonValues);
 	iowrite32(ioread32(GPIO_IF),GPIO_IFC);
+
+	if (async_queue) {
+		kill_fasync(&async_queue, SIGIO, POLL_IN);
+	}
 	return IRQ_HANDLED;
 }
 
@@ -136,55 +146,8 @@ static struct platform_driver my_driver = {
 };
 
 static int __init template_init(void)
-
 {		
 	platform_driver_register(&my_driver);
-
-	
-/*
-	 if (!request_mem_region((unsigned long)GPIO_PC_MODEL, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_PC_MODEL\n");
-	   return -1;
-	 }
-
-	 if (!request_mem_region((unsigned long)GPIO_PC_DOUT, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_PC_DOUT\n");
-	   return -1;
-	 }
-
-	 if (!request_mem_region((unsigned long)GPIO_EXTIPSELL, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_EXTIPSELL\n");
-	   return -1;
-	 }
-
-	 if (!request_mem_region((unsigned long)GPIO_EXTIRISE, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_EXTRISE\n");
-	   return -1;
-	 }
-	 if (!request_mem_region((unsigned long)GPIO_EXTIFALL, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_EXTIFALL\n");
-	   return -1;
-	 }
-
-	 if (!request_mem_region((unsigned long)GPIO_IEN, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_IEN\n");
-	   return -1;
-	 }
-	 if (!request_mem_region((unsigned long)GPIO_IF, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_IF\n");
-	   return -1;
-	 }
-	 if (!request_mem_region((unsigned long)GPIO_IFC, 4, DEVICE_NAME)) {
-	   printk(KERN_ERR "Access denied: GPIO_IFC\n");
-	   return -1;
-	 }
-
-	 iowrite32(0x33333333,GPIO_PC_MODEL);
-	 iowrite32(0xFF,GPIO_PC_DOUT);
-	 iowrite32(0x22222222,GPIO_EXTIPSELL);
-	 iowrite32(0xFF,GPIO_EXTIRISE);
-	 iowrite32(0xFF,GPIO_EXTIFALL);*/
-
 	 return 0;
 }
 
