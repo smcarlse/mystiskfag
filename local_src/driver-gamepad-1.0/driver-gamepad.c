@@ -32,6 +32,7 @@ static ssize_t my_write(struct file *filp, const char __user *buff, size_t count
 struct fasync_struct *async_queue;
 
 static int my_fasync(int fd, struct file *filp, int mode){
+	printk("nå kjører my_fasync \n");
 	return fasync_helper(fd, filp, mode, &async_queue);
 }
 
@@ -79,9 +80,11 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs *regs
 	buttonValues &= 255;
 	printk("buttonValues: %d", buttonValues);
 	iowrite32(ioread32(GPIO_IF),GPIO_IFC);
-
+	printk("async_queue %p",async_queue);
 	if (async_queue) {
+		printk("sender kill_fasync \n");
 		kill_fasync(&async_queue, SIGIO, POLL_IN);
+		printk("sender kill_fasync end \n");
 	}
 	return IRQ_HANDLED;
 }

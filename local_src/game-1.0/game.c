@@ -19,6 +19,7 @@ int fbfd;
 size_t screensize = (320 * 240 * 16) / 8;
 short *map;
 int oflags;
+int e;
 
 void button_handler(int signal) {
 	printf("dette er et signal \n");
@@ -32,12 +33,6 @@ struct sigaction siga = {
 int main(int argc, char *argv[])
 {
 	fbfd = open("/dev/fb0", O_RDWR);
-	
-	sigaction(SIGIO, &siga, NULL);
-	fcntl(fbfd, F_SETOWN, getpid());
-	oflags = fcntl(fbfd, F_GETFL);
-	fcntl(fbfd, F_SETFL, oflags | FASYNC);	
-	
 	
 	map = (short*) mmap(NULL, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
 	printf("Mapping %p \n", map);
@@ -69,6 +64,16 @@ int main(int argc, char *argv[])
         numberOfBytesRead = read(gamepadDriver, &buttonValue, 4);
 	printf("buttonValue fra game: %d  number of bytes read: %d \n",numberOfBytesRead, buttonValue);
 	printf("error 2: %d \n", errno);
+
+		
+	sigaction(SIGIO, &siga, NULL);
+	e = fcntl(gamepadDriver, F_SETOWN, getpid());
+	printf("åpner signal eller noe %d \n", e);
+	oflags = fcntl(gamepadDriver, F_GETFL);
+	e = fcntl(gamepadDriver, F_SETFL, oflags | FASYNC);
+	printf("fcntl %d \n", e);
+	printf("error 1: %s \n", strerror(errno));
+
 	while(1);
 	exit(EXIT_SUCCESS);
 }
