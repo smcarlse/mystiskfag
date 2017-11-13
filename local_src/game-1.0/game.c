@@ -20,27 +20,142 @@ size_t screensize = (320 * 240 * 16) / 8;
 short *map;
 int oflags;
 int e;
-int x = 0;
+int x = 110;
 int star = 0; 
+int life = 0;
+struct fb_copyarea rect;
+int startGame = 1;
+
+
+void init()
+{
+	rect.dx = 0;
+	rect.dy = 0;
+	rect.width = 320;
+	rect.height = 240;
+
+
+	int i;
+
+	for (i = 0; i < (320*240); i++) {
+		map[i] = 0; 
+	}
+	
+	map[320*2+200] = 3840;
+	map[320*2+220] = 3840;
+	map[320*2+240] = 3840;
+
+	for (i = 320*234+x; i < (320*234)+50+x; i++) {
+		map[i] = 65535; 
+	}
+
+	// command driver to update display
+	ioctl(fbfd, 0x4680, &rect);	
+}
+
+void game_over()
+{
+	startGame = 0;
+	life = 0;
+	printf("gameOver:((((");
+	rect.dx = 0;
+	rect.dy = 0;
+	rect.width = 320;
+	rect.height = 240;
+	x = 110;
+
+	int i;
+
+	for (i = 0; i < (320*240); i++) {
+		map[i] = 8; 
+	}
+	
+	ioctl(fbfd, 0x4680, &rect);
+	
+}
+
+void falling_star()
+{
+	star = rand()%320;
+	int originalStar = star;
+	printf("hei dette er et random tall: %d \n", star);
+	rect.dx = star;
+	rect.dy = 0;
+	rect.width = 2;
+	rect.height = 235;
+	int count = 0;
+
+	struct fb_copyarea lyfeRect;
+	lyfeRect.dx = 195;
+	lyfeRect.dy = 0;
+	lyfeRect.width = 50;
+	lyfeRect.height = 5;
+	
+	while(1)
+	{
+		count += 1;
+		if (count %30000 == 0){
+			int k;
+			for (k = originalStar; k<234*320; k+=320){
+				map[k]=0;
+				map[k+1]=0;
+			}
+			star += 320;
+
+			if(star>=235*320){
+				printf("x: %d, star: %d \n", x+320*235, star);
+				if(320*235+x<star && star<320*235+x+50)
+				{
+					printf("poeng mann \n");
+				}else{
+					
+					map[320*2+200+life*20] = 0;
+					life+=1;
+					printf("lyfe  \n");
+					ioctl(fbfd, 0x4680, &lyfeRect);
+					if(life == 3){
+						return;
+					}
+					
+				}
+				star = rand()%320;
+				originalStar = star;
+				rect.dx = star;
+				
+			}else{
+				map[star +1] = 65355;
+				map[star] = 65355;
+				map[star+320] = 65355;
+				map[star+321] = 65355;
+			}
+			ioctl(fbfd, 0x4680, &rect);
+			
+		}
+			
+	}	
+}
+
+
 
 void button_handler(int signal) {
+	startGame = 1;
 	printf("dette er et signal \n");
 
 	int numberOfBytesRead __attribute__ ((unused));
         unsigned int buttonValue;
         numberOfBytesRead = read(gamepadDriver, &buttonValue, 4);
 	printf("buttonValue fra game: %d  number of bytes read: %d \n",numberOfBytesRead, buttonValue);
-		// setup which part of the framebuffer that is to be refreshed 
+	// setup which part of the framebuffer that is to be refreshed 
 	// for performance reasons, use as small rectangle as possible 
-	struct fb_copyarea rect;
-	rect.dx = 0;
-	rect.dy = 235;
-	rect.width = 320;
-	rect.height = 1;
+
+	struct fb_copyarea buttonRect;
+	buttonRect.dx = 0;
+	buttonRect.dy = 235;
+	buttonRect.width = 320;
+	buttonRect.height = 1;
 
 
 	int i;
-	int j;
 
 	if(buttonValue == 4 ){
 		for (i = 320*235; i < (320*236); i++) {
@@ -64,7 +179,7 @@ void button_handler(int signal) {
 		}
 	}
 	// command driver to update display
-	ioctl(fbfd, 0x4680, &rect);
+	ioctl(fbfd, 0x4680, &buttonRect);
 	
 	return;
 }
@@ -99,43 +214,21 @@ int main(int argc, char *argv[])
 	printf("fcntl %d \n", e);
 	printf("error 1: %s \n", strerror(errno));
 	
-	struct fb_copyarea rect;
-	rect.dx = 0;
-	rect.dy = 0;
-	rect.width = 320;
-	rect.height = 240;
-
-	int i;
-
-	for (i = 0; i < (320*240); i++) {
-		map[i] = 0; 
-	}
-	// command driver to update display
-	ioctl(fbfd, 0x4680, &rect);
-	
-	star = rand()%320;
-	printf("hei dette er et random tall: %d \n", star);
-	rect.dx = star;
-	rect.dy = 0;
-	rect.width = 1;
-	rect.height = 240;
-	int count = 0;
-	
-	while(1)
+	while(1) 
 	{
-		count += 1;
-		if (count %30000 == 0){
-		int k;
-		for (k = star; k<240*320; k+=320){
-			map[k]=0;
-		}
-		map[star] = 65355;
-		star += 320;
-
-		ioctl(fbfd, 0x4680, &rect);
-		}
+		printf("This is required for the code to work xD \n");
+		if (startGame)
+		{
 			
+			init();
+		
+			falling_star();
+
+			game_over();
+		}
+	
 	}
 	exit(EXIT_SUCCESS);
 }
+
 
