@@ -10,6 +10,7 @@
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <time.h>
 
 #define GAMEPAD "/dev/gamepad"
 
@@ -25,6 +26,8 @@ int star = 0;
 int life = 0;
 struct fb_copyarea rect;
 volatile int startGame = 1;
+
+
 
 
 void init()
@@ -91,10 +94,23 @@ void falling_star()
 	lyfeRect.width = 50;
 	lyfeRect.height = 5;
 	
+ 	int sleep;
+	struct timespec req = {
+	.tv_sec = 0,
+	.tv_nsec = 30000
+	};
+
+	struct timespec rem;
+	
 	while(1)
 	{
-		count += 1;
-		if (count %30000 == 0){
+		sleep = nanosleep(&req, &rem);
+		while (sleep != 0){
+			struct timespec rem2 = rem;
+			sleep = nanosleep(&rem2, &rem);
+		}
+		//count += 1;
+		//if (count %30000 == 0){
 			int k;
 			for (k = originalStar; k<234*320; k+=320){
 				map[k]=0;
@@ -104,7 +120,7 @@ void falling_star()
 
 			if(star>=235*320){
 				printf("x: %d, star: %d \n", x+320*235, star);
-				if(320*235+x<star && star<320*235+x+50)
+				if(320*235+x<=star && star<=320*235+x+50)
 				{
 					printf("poeng mann \n");
 				}else{
@@ -130,7 +146,7 @@ void falling_star()
 			}
 			ioctl(fbfd, 0x4680, &rect);
 			
-		}
+		//}
 			
 	}	
 }
@@ -224,6 +240,7 @@ int main(int argc, char *argv[])
 
 			game_over();
 		}
+		sleep(500);
 	
 	}
 	exit(EXIT_SUCCESS);
