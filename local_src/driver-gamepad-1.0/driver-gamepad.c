@@ -69,6 +69,8 @@ struct resource *gpioRes;
 int irqEven;
 int irqOdd;
 
+//void *GPIO;
+
 unsigned int buttonValues;
 
 static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs *regs)
@@ -111,6 +113,9 @@ static int my_probe(struct platform_device *dev)
 	irqEven = platform_get_irq(dev, 0);
 	irqOdd = platform_get_irq(dev, 1);
 	gpioRes = request_mem_region(res->start, res->end - res->start, DEVICE_NAME);
+	
+	//GPIO = ioremap_nocache(res->start, res->end - res->start);
+
 	printk("requestet mem%p\n", gpioRes);
 
 	iowrite32(0x33333333,GPIO_PC_MODEL);
@@ -191,7 +196,17 @@ static ssize_t my_write(struct file *filp, const char __user *buff, size_t count
 
 static void __exit template_cleanup(void)
 {
-	 printk("Short life for a small module...\n");
+	iowrite32(0, GPIO_IEN);
+ 	release_mem_region(res->start, res->end - res->start);
+
+	free_irq(irqEven, NULL);
+	free_irq(irqOdd, NULL);
+	
+	device_destroy(cl, device);
+	class_destroy(cl);
+	cdev_del(&my_cdev);
+	unregister_chrdev_region(device,1);
+	printk("Short life for a small module...\n");
 }
 
 module_init(template_init);

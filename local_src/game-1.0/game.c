@@ -24,7 +24,7 @@ int x = 110;
 int star = 0; 
 int life = 0;
 struct fb_copyarea rect;
-int startGame = 1;
+volatile int startGame = 1;
 
 
 void init()
@@ -139,12 +139,10 @@ void falling_star()
 
 void button_handler(int signal) {
 	startGame = 1;
-	printf("dette er et signal \n");
 
 	int numberOfBytesRead __attribute__ ((unused));
         unsigned int buttonValue;
         numberOfBytesRead = read(gamepadDriver, &buttonValue, 4);
-	printf("buttonValue fra game: %d  number of bytes read: %d \n",numberOfBytesRead, buttonValue);
 	// setup which part of the framebuffer that is to be refreshed 
 	// for performance reasons, use as small rectangle as possible 
 
@@ -216,7 +214,7 @@ int main(int argc, char *argv[])
 	
 	while(1) 
 	{
-		printf("This is required for the code to work xD \n");
+		
 		if (startGame)
 		{
 			
