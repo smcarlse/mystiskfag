@@ -1,7 +1,3 @@
-/*
- * This is a demo Linux kernel module.
- */
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -21,128 +17,45 @@
 #include <linux/platform_device.h>
 #include <linux/fs.h>
 
-
 #define DEVICE_NAME "gamepad"
 
+// Declare functions
 static int my_open (struct inode *inode, struct file *filp);
 static int my_release(struct inode *inode, struct file *filp);
 static ssize_t my_read(struct file *filp, char __user *buff, size_t count, loff_t *offp);
-static ssize_t my_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp);
+static int my_fasync(int fd, struct file *filp, int mode);
+static int __init template_init(void);
+static int my_probe(struct platform_device *dev);
+static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs *regs);
+static void __exit template_cleanup(void);
+static int my_remove(struct platform_device *dev);
 
-struct fasync_struct *async_queue;
-
-static int my_fasync(int fd, struct file *filp, int mode){
-	printk("nå kjører my_fasync \n");
-	return fasync_helper(fd, filp, mode, &async_queue);
-}
-
+// Declare variables
 static struct file_operations my_fops = { 
 	.owner = THIS_MODULE,
 	.read = my_read,
-	.write = my_write,
 	.open = my_open,
 	.release = my_release, 
 	.fasync = my_fasync
 };
-
-/*
- * template_init - function to insert this module into kernel space
- *
- * This is the first of two exported functions to handle inserting this
- * code into a running kernel
- *
- * Returns 0 if successfull, otherwise -1
- */
+struct cdev my_cdev;
+struct class *cl;
+struct resource *res;
+struct resource *gpioRes;
+struct fasync_struct *async_queue;
 
 dev_t device;
-
-struct cdev my_cdev;
-
-struct class *cl;
-
 int err;
-
-struct resource *res;
-
-struct resource *gpioRes;
-
 int irqEven;
 int irqOdd;
-
-//void *GPIO;
-
 unsigned int buttonValues;
 
-static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs *regs)
-{
-	printk("Dette er et interrupt");
-	printk("read buttons");
-	buttonValues = ioread32(GPIO_PC_DIN);
-	buttonValues = ~buttonValues;
-	buttonValues &= 255;
-	printk("buttonValues: %d", buttonValues);
-	iowrite32(ioread32(GPIO_IF),GPIO_IFC);
-	printk("async_queue %p",async_queue);
-	if (async_queue) {
-		printk("sender kill_fasync \n");
-		kill_fasync(&async_queue, SIGIO, POLL_IN);
-		printk("sender kill_fasync end \n");
-	}
-	return IRQ_HANDLED;
-}
-
-
-static int my_probe(struct platform_device *dev)
-{
-	printk("yo");
-	err = alloc_chrdev_region(&device, 0, 1, DEVICE_NAME);
-	printk("Major %d\n", err);
-	cdev_init(&my_cdev, &my_fops);
-	printk("Major %d\n", err);
-	err = cdev_add(&my_cdev, device, 1);
-	printk("Major %d\n", err);
-	cl = class_create(THIS_MODULE, DEVICE_NAME);
-	printk("cl: %p\n", cl);
-	err = device_create(cl, NULL, device, NULL, DEVICE_NAME);
-	printk("Major %d\n", err);
-	printk("Major %d\n", MAJOR(device));
-	printk("Hello World, here is your module speaking\n");
-	res = platform_get_resource(dev, IORESOURCE_MEM, 0);
-
-	printk("Hentet res%p\n", res);
-	irqEven = platform_get_irq(dev, 0);
-	irqOdd = platform_get_irq(dev, 1);
-	gpioRes = request_mem_region(res->start, res->end - res->start, DEVICE_NAME);
-	
-	//GPIO = ioremap_nocache(res->start, res->end - res->start);
-
-	printk("requestet mem%p\n", gpioRes);
-
-	iowrite32(0x33333333,GPIO_PC_MODEL);
-	iowrite32(0xFF,GPIO_PC_DOUT);
-
-	request_irq(irqEven,interrupt_handler,NULL,DEVICE_NAME, NULL);
-	request_irq(irqOdd,interrupt_handler,NULL,DEVICE_NAME, NULL);
-
-	iowrite32(0x22222222,GPIO_EXTIPSELL);
-	iowrite32(0xFF,GPIO_EXTIRISE);
-	iowrite32(0xFF,GPIO_EXTIFALL);
-	iowrite32(0xFF, GPIO_IEN);
-	return 0;
-}
-
-static int my_remove(struct platform_device *dev)
-{
-	printk("Short life for a small module...\n");
-}
-
+// ------------------------ Platform device set up ----------------------
 static const struct of_device_id my_of_match[] = {
 	{ .compatible = "tdt4258", },
 	{},
 };
-
 MODULE_DEVICE_TABLE(of, my_of_match);
-
 static struct platform_driver my_driver = {
 	.probe = my_probe,
 	.remove = my_remove,
@@ -153,28 +66,35 @@ static struct platform_driver my_driver = {
 	},
 };
 
-static int __init template_init(void)
-{		
-	platform_driver_register(&my_driver);
-	 return 0;
+// ---------------------------- Interrupt related -----------------------------
+static int my_fasync(int fd, struct file *filp, int mode)
+{
+	return fasync_helper(fd, filp, mode, &async_queue);
 }
 
-/*
- * template_cleanup - function to cleanup this module from kernel space
- *
- * This is the second of two exported functions to handle cleanup this
- * code from a running kernel
- */
+static irqreturn_t interrupt_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+	buttonValues = ioread32(GPIO_PC_DIN);
+	buttonValues = ~buttonValues;
+	buttonValues &= 255;
+	iowrite32(ioread32(GPIO_IF),GPIO_IFC);
+	if (async_queue) 
+	{
+		kill_fasync(&async_queue, SIGIO, POLL_IN);
+	}
+	return IRQ_HANDLED;
+}
 
+// ---------------------- Visible functions for game --------------------------
 static int my_open (struct inode *inode, struct file *filp)
 {
-	printk("open device");
+	printk("Open device \n");
 	return 0;
 }
 
 static int my_release(struct inode *inode, struct file *filp)
 {
-	printk("release device");
+	printk("Release device \n");
 	return 0;
 }
 
@@ -184,17 +104,54 @@ static ssize_t my_read(struct file *filp, char __user *buff, size_t count, loff_
 	return 4-copy_to_user(buff, &buttonValues, 4);
 }
 
-
-static ssize_t my_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
-{
-	printk("write buttons, say what?");
-	return 1;
+// -------------------------- Intialize ---------------------------------------
+static int __init template_init(void)
+{		
+	platform_driver_register(&my_driver);
+	return 0;
 }
 
 
+static int my_probe(struct platform_device *dev)
+{
+	// Device number
+	alloc_chrdev_region(&device, 0, 1, DEVICE_NAME);
 
+	// Set up char driver
+	cdev_init(&my_cdev, &my_fops);
+	cdev_add(&my_cdev, device, 1);
+	
+	// Make visible in filesystem
+	cl = class_create(THIS_MODULE, DEVICE_NAME);
+	device_create(cl, NULL, device, NULL, DEVICE_NAME);
 
-static void __exit template_cleanup(void)
+	res = platform_get_resource(dev, IORESOURCE_MEM, 0);
+
+	// Set up interrupt
+	irqEven = platform_get_irq(dev, 0);
+	irqOdd = platform_get_irq(dev, 1);
+
+	gpioRes = request_mem_region(res->start, res->end - res->start, DEVICE_NAME);
+
+	iowrite32(0x33333333,GPIO_PC_MODEL);
+	iowrite32(0xFF,GPIO_PC_DOUT);
+
+	request_irq(irqEven, (irq_handler_t)interrupt_handler, 0, DEVICE_NAME, &my_cdev);
+	request_irq(irqOdd, (irq_handler_t)interrupt_handler, 0, DEVICE_NAME, &my_cdev);
+
+	iowrite32(0x22222222,GPIO_EXTIPSELL);
+	iowrite32(0xFF,GPIO_EXTIRISE);
+	iowrite32(0xFF,GPIO_EXTIFALL);
+	iowrite32(0xFF, GPIO_IEN);
+
+	printk("Driver set up complete \n");
+
+	return 0;
+}
+
+// ------------------------- Terminate ----------------------------------------
+// Called when template_cleanup is called
+static int my_remove(struct platform_device *dev)
 {
 	iowrite32(0, GPIO_IEN);
  	release_mem_region(res->start, res->end - res->start);
@@ -205,13 +162,19 @@ static void __exit template_cleanup(void)
 	device_destroy(cl, device);
 	class_destroy(cl);
 	cdev_del(&my_cdev);
-	unregister_chrdev_region(device,1);
+	unregister_chrdev_region(device, 1);
 	printk("Short life for a small module...\n");
+	return 0;
+}
+
+// Remove driver
+static void __exit template_cleanup(void)
+{
+	platform_driver_unregister(&my_driver);
 }
 
 module_init(template_init);
 module_exit(template_cleanup);
 
-MODULE_DESCRIPTION("Small module, demo only, not very useful.");
+MODULE_DESCRIPTION("Small module, very useful. \n");
 MODULE_LICENSE("GPL");
-
